@@ -1,3 +1,4 @@
+// src/controllers/adminDashboard.controller.js
 const { query } = require("../db/db");
 
 async function adminDashboard(req, res) {
@@ -6,7 +7,7 @@ async function adminDashboard(req, res) {
     const totalsRows = await query(`
       SELECT
         COUNT(*) AS totalOrders,
-        COALESCE(SUM(total), 0) AS totalRevenue
+        COALESCE(SUM(CASE WHEN status IN ('DELIVERED','COMPLETED') THEN total ELSE 0 END), 0) AS totalRevenue
       FROM orders
     `);
 

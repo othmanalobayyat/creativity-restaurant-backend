@@ -1,3 +1,4 @@
+// src/data/mockData.js
 const mockData = [
   // ===== Burgers / Sandwiches (category_id: 1) =====
   {

@@ -1,7 +1,14 @@
 // src/controllers/adminOrders.controller.js
 const { query } = require("../db/db");
 
-const ALLOWED_STATUSES = ["PENDING", "PROCESSING", "REJECTED", "COMPLETED"];
+const ALLOWED_STATUSES = [
+  "PENDING",
+  "PROCESSING",
+  "DELIVERY",
+  "DELIVERED",
+  "COMPLETED",
+  "REJECTED",
+];
 
 /**
  * GET /api/admin/orders

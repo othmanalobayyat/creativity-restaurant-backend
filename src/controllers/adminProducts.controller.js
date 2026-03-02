@@ -9,7 +9,6 @@ const { query } = require("../db/db");
  */
 async function adminCreateProduct(req, res) {
   try {
-    const id = Number(req.body.id);
     const name = String(req.body.name || "").trim();
     const price = Number(req.body.price);
     const quantity = Number.isFinite(Number(req.body.quantity))
@@ -21,16 +20,9 @@ async function adminCreateProduct(req, res) {
       req.body.description == null ? null : String(req.body.description).trim();
     const category_id = Number(req.body.category_id);
 
-    if (!Number.isFinite(id) || id <= 0) {
-      return res
-        .status(400)
-        .json({ error: "id is required (positive number)" });
-    }
     if (!name) return res.status(400).json({ error: "name is required" });
     if (!Number.isFinite(price) || price < 0) {
-      return res
-        .status(400)
-        .json({ error: "price must be a valid number >= 0" });
+      return res.status(400).json({ error: "price must be >= 0" });
     }
     if (!Number.isFinite(category_id) || category_id <= 0) {
       return res.status(400).json({ error: "category_id is required" });
@@ -42,19 +34,11 @@ async function adminCreateProduct(req, res) {
     if (!cat.length)
       return res.status(400).json({ error: "Invalid category_id" });
 
-    const idExists = await query("SELECT id FROM items WHERE id=? LIMIT 1", [
-      id,
-    ]);
-    if (idExists.length) {
-      return res.status(409).json({ error: "Product id already exists" });
-    }
-
     await query(
       `INSERT INTO items
-        (id, name, price, quantity, image_url, description, category_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        (name, price, quantity, image_url, description, category_id, is_active)
+       VALUES (?, ?, ?, ?, ?, ?, 1)`,
       [
-        id,
         name,
         price,
         Math.max(0, Math.floor(quantity)),
@@ -65,9 +49,8 @@ async function adminCreateProduct(req, res) {
     );
 
     const created = await query(
-      `SELECT id, name, price, quantity, image_url, description, category_id, created_at
-       FROM items WHERE id=? LIMIT 1`,
-      [id],
+      `SELECT id, name, price, quantity, image_url, description, category_id, is_active, created_at
+       FROM items WHERE id = LAST_INSERT_ID() LIMIT 1`,
     );
 
     return res.json({ message: "✅ Product created", product: created[0] });

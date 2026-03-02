@@ -8,17 +8,9 @@ const { query } = require("../db/db");
  */
 async function adminCreateCategory(req, res) {
   try {
-    const id = Number(req.body.id);
     const name = String(req.body.name || "").trim();
-
-    if (!Number.isFinite(id) || id <= 0) {
-      return res
-        .status(400)
-        .json({ error: "id is required (positive number)" });
-    }
     if (!name) return res.status(400).json({ error: "name is required" });
 
-    // unique name
     const nameExists = await query(
       "SELECT id FROM categories WHERE name=? LIMIT 1",
       [name],
@@ -27,19 +19,10 @@ async function adminCreateCategory(req, res) {
       return res.status(409).json({ error: "Category name already exists" });
     }
 
-    const idExists = await query(
-      "SELECT id FROM categories WHERE id=? LIMIT 1",
-      [id],
-    );
-    if (idExists.length) {
-      return res.status(409).json({ error: "Category id already exists" });
-    }
-
-    await query("INSERT INTO categories (id, name) VALUES (?, ?)", [id, name]);
+    await query("INSERT INTO categories (name) VALUES (?)", [name]);
 
     const created = await query(
-      "SELECT id, name FROM categories WHERE id=? LIMIT 1",
-      [id],
+      "SELECT id, name FROM categories WHERE id = LAST_INSERT_ID() LIMIT 1",
     );
 
     return res.json({ message: "✅ Category created", category: created[0] });
@@ -47,7 +30,6 @@ async function adminCreateCategory(req, res) {
     return res.status(500).json({ error: e.message });
   }
 }
-
 /**
  * PUT /api/admin/categories/:id
  * body: { name }

@@ -24,7 +24,7 @@ const meRoutes = require("./src/routes/me.routes");
 const adminRoutes = require("./src/routes/admin.routes");
 const uploadCloudinaryRoutes = require("./src/routes/uploadCloudinary.routes");
 
-app.get("/", (req, res) => res.send("Backend is running ✅"));
+app.get("/health", (req, res) => res.json({ ok: true }));
 
 app.use("/api", authRoutes);
 app.use("/api", meRoutes);

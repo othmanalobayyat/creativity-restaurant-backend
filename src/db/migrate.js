@@ -1,3 +1,4 @@
+// src/db/migrate.js
 require("dotenv").config();
 const { query } = require("./db");
 
