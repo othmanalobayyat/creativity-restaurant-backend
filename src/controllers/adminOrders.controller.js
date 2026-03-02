@@ -13,7 +13,7 @@ const ALLOWED_STATUSES = [
 /**
  * GET /api/admin/orders
  * Optional query:
- *  - status=PENDING|PROCESSING|REJECTED|COMPLETED
+ *  - status=PENDING|PROCESSING|DELIVERY|DELIVERED|REJECTED|COMPLETED
  *  - q=search by user email or name or order id
  *  - limit=number (default 50, max 200)
  *  - offset=number (default 0)
@@ -24,8 +24,16 @@ async function adminListOrders(req, res) {
       .trim()
       .toUpperCase();
     const q = String(req.query.q || "").trim();
-    const limit = Math.min(200, Math.max(1, Number(req.query.limit || 50)));
-    const offset = Math.max(0, Number(req.query.offset || 0));
+
+    // ✅ robust parsing (prevents NaN/undefined)
+    let limit = parseInt(req.query.limit, 10);
+    let offset = parseInt(req.query.offset, 10);
+
+    if (!Number.isFinite(limit)) limit = 50;
+    if (!Number.isFinite(offset)) offset = 0;
+
+    limit = Math.min(200, Math.max(1, limit));
+    offset = Math.max(0, offset);
 
     let where = "WHERE 1=1";
     const params = [];
@@ -39,14 +47,14 @@ async function adminListOrders(req, res) {
     }
 
     if (q) {
-      // search by order id exact, or user email/name partial
       const maybeId = Number(q);
       if (Number.isFinite(maybeId) && maybeId > 0) {
         where += " AND o.id = ?";
         params.push(maybeId);
       } else {
         where += " AND (LOWER(u.email) LIKE ? OR LOWER(u.full_name) LIKE ?)";
-        params.push(`%${q.toLowerCase()}%`, `%${q.toLowerCase()}%`);
+        const qq = `%${q.toLowerCase()}%`;
+        params.push(qq, qq);
       }
     }
 
@@ -63,6 +71,7 @@ async function adminListOrders(req, res) {
 
     const total = Number(countRows?.[0]?.total || 0);
 
+    // ✅ IMPORTANT: no placeholders for LIMIT/OFFSET (fixes stmt_execute args errors)
     const rows = await query(
       `
       SELECT
@@ -85,9 +94,9 @@ async function adminListOrders(req, res) {
       JOIN users u ON u.id = o.user_id
       ${where}
       ORDER BY o.created_at DESC
-      LIMIT ? OFFSET ?
+      LIMIT ${limit} OFFSET ${offset}
       `,
-      [...params, limit, offset],
+      params,
     );
 
     return res.json({
@@ -103,7 +112,7 @@ async function adminListOrders(req, res) {
 
 /**
  * PUT /api/admin/orders/:id/status
- * body: { status: "PROCESSING" | "REJECTED" | "COMPLETED" | "PENDING" }
+ * body: { status: "PROCESSING" | "REJECTED" | "COMPLETED" | "PENDING" | "DELIVERY" | "DELIVERED" }
  */
 async function adminUpdateOrderStatus(req, res) {
   try {
@@ -122,8 +131,9 @@ async function adminUpdateOrderStatus(req, res) {
     const exists = await query("SELECT id FROM orders WHERE id=? LIMIT 1", [
       orderId,
     ]);
-    if (!exists.length)
+    if (!exists.length) {
       return res.status(404).json({ error: "Order not found" });
+    }
 
     await query("UPDATE orders SET status=? WHERE id=?", [status, orderId]);
 

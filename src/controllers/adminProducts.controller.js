@@ -3,9 +3,9 @@ const { query } = require("../db/db");
 
 /**
  * POST /api/admin/products
- * body: { id, name, price, quantity, image_url, description, category_id }
+ * body: { name, price, quantity, image_url, description, category_id }
  *
- * ملاحظة: جدول items عندك id NOT NULL بدون AUTO_INCREMENT
+ * ✅ الآن: id صار AUTO_INCREMENT (ما بنستقبل id من الفرونت)
  */
 async function adminCreateProduct(req, res) {
   try {
@@ -146,7 +146,7 @@ async function adminUpdateProduct(req, res) {
     await query(`UPDATE items SET ${fields.join(", ")} WHERE id=?`, params);
 
     const updated = await query(
-      `SELECT id, name, price, quantity, image_url, description, category_id, created_at
+      `SELECT id, name, price, quantity, image_url, description, category_id, is_active, created_at
        FROM items WHERE id=? LIMIT 1`,
       [id],
     );
@@ -191,15 +191,22 @@ async function adminDeleteProduct(req, res) {
   }
 }
 
-// ✅ NEW: list products
+// ✅ list products (FIXED: no placeholders for LIMIT/OFFSET)
 async function adminListProducts(req, res) {
   try {
     const q = String(req.query.q || "")
       .trim()
       .toLowerCase();
     const categoryId = String(req.query.categoryId || "").trim();
-    const limit = Math.min(200, Math.max(1, Number(req.query.limit || 50)));
-    const offset = Math.max(0, Number(req.query.offset || 0));
+
+    let limit = parseInt(req.query.limit, 10);
+    let offset = parseInt(req.query.offset, 10);
+
+    if (!Number.isFinite(limit)) limit = 50;
+    if (!Number.isFinite(offset)) offset = 0;
+
+    limit = Math.min(200, Math.max(1, limit));
+    offset = Math.max(0, offset);
 
     let where = "WHERE 1=1";
     const params = [];
@@ -227,6 +234,7 @@ async function adminListProducts(req, res) {
     );
     const total = Number(countRows?.[0]?.total || 0);
 
+    // ✅ IMPORTANT: LIMIT/OFFSET injected as sanitized numbers
     const rows = await query(
       `
       SELECT
@@ -244,9 +252,9 @@ async function adminListProducts(req, res) {
       JOIN categories c ON c.id = i.category_id
       ${where}
       ORDER BY i.id DESC
-      LIMIT ? OFFSET ?
+      LIMIT ${limit} OFFSET ${offset}
       `,
-      [...params, limit, offset],
+      params,
     );
 
     return res.json({ total, limit, offset, products: rows });
@@ -255,7 +263,7 @@ async function adminListProducts(req, res) {
   }
 }
 
-// ✅ NEW: get product by id
+// ✅ get product by id
 async function adminGetProductById(req, res) {
   try {
     const id = Number(req.params.id);
