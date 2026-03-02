@@ -8,16 +8,18 @@ if (!process.env.DATABASE_URL) {
 const pool = mysql.createPool(process.env.DATABASE_URL);
 
 // اختبار اتصال سريع عند التشغيل
-(async () => {
-  try {
-    const conn = await pool.getConnection();
-    await conn.ping();
-    conn.release();
-    console.log("✅ Connected to MySQL (pool)");
-  } catch (err) {
-    console.log("❌ Database connection failed:", err.message);
-  }
-})();
+if (process.env.NODE_ENV !== "test") {
+  (async () => {
+    try {
+      const conn = await pool.getConnection();
+      await conn.ping();
+      conn.release();
+      console.log("✅ Connected to MySQL (pool)");
+    } catch (err) {
+      console.log("❌ Database connection failed:", err.message);
+    }
+  })();
+}
 
 async function query(sql, params = []) {
   const [rows] = await pool.execute(sql, params);
