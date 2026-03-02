@@ -1,153 +1,113 @@
-// src/controllers/adminCategories.controller.js
 const { query } = require("../db/db");
+const asyncHandler = require("../utils/asyncHandler");
+const { httpError } = require("../utils/httpError");
 
-/**
- * POST /api/admin/categories
- * body: { id, name }
- * ملاحظة: جدول categories عندك id NOT NULL وما عليه AUTO_INCREMENT
- */
-async function adminCreateCategory(req, res) {
-  try {
-    const name = String(req.body.name || "").trim();
-    if (!name) return res.status(400).json({ error: "name is required" });
+const adminCreateCategory = asyncHandler(async (req, res) => {
+  const name = String(req.body.name || "").trim();
+  if (!name) throw httpError(400, "name is required");
 
-    const nameExists = await query(
-      "SELECT id FROM categories WHERE name=? LIMIT 1",
-      [name],
-    );
-    if (nameExists.length) {
-      return res.status(409).json({ error: "Category name already exists" });
-    }
-
-    await query("INSERT INTO categories (name) VALUES (?)", [name]);
-
-    const created = await query(
-      "SELECT id, name FROM categories WHERE id = LAST_INSERT_ID() LIMIT 1",
-    );
-
-    return res.json({ message: "✅ Category created", category: created[0] });
-  } catch (e) {
-    return res.status(500).json({ error: e.message });
+  const nameExists = await query(
+    "SELECT id FROM categories WHERE name=? LIMIT 1",
+    [name],
+  );
+  if (nameExists.length) {
+    throw httpError(409, "Category name already exists");
   }
-}
-/**
- * PUT /api/admin/categories/:id
- * body: { name }
- */
-async function adminUpdateCategory(req, res) {
-  try {
-    const id = Number(req.params.id);
-    const name = String(req.body.name || "").trim();
 
-    if (!Number.isFinite(id) || id <= 0) {
-      return res.status(400).json({ error: "Invalid category id" });
-    }
-    if (!name) return res.status(400).json({ error: "name is required" });
+  await query("INSERT INTO categories (name) VALUES (?)", [name]);
 
-    const exists = await query("SELECT id FROM categories WHERE id=? LIMIT 1", [
-      id,
-    ]);
-    if (!exists.length)
-      return res.status(404).json({ error: "Category not found" });
+  const created = await query(
+    "SELECT id, name FROM categories WHERE id = LAST_INSERT_ID() LIMIT 1",
+  );
 
-    const nameExists = await query(
-      "SELECT id FROM categories WHERE name=? AND id<>? LIMIT 1",
-      [name, id],
-    );
-    if (nameExists.length) {
-      return res.status(409).json({ error: "Category name already exists" });
-    }
+  res.json({ message: "✅ Category created", category: created[0] });
+});
 
-    await query("UPDATE categories SET name=? WHERE id=?", [name, id]);
+const adminUpdateCategory = asyncHandler(async (req, res) => {
+  const id = Number(req.params.id);
+  const name = String(req.body.name || "").trim();
 
-    const updated = await query(
-      "SELECT id, name FROM categories WHERE id=? LIMIT 1",
-      [id],
-    );
+  if (!Number.isFinite(id) || id <= 0)
+    throw httpError(400, "Invalid category id");
+  if (!name) throw httpError(400, "name is required");
 
-    return res.json({ message: "✅ Category updated", category: updated[0] });
-  } catch (e) {
-    return res.status(500).json({ error: e.message });
+  const exists = await query("SELECT id FROM categories WHERE id=? LIMIT 1", [
+    id,
+  ]);
+  if (!exists.length) throw httpError(404, "Category not found");
+
+  const nameExists = await query(
+    "SELECT id FROM categories WHERE name=? AND id<>? LIMIT 1",
+    [name, id],
+  );
+  if (nameExists.length) {
+    throw httpError(409, "Category name already exists");
   }
-}
 
-/**
- * DELETE /api/admin/categories/:id
- * ملاحظة: عندك FK من items.category_id -> categories.id
- * فلازم تمنع الحذف إذا فيه items أو تعمل delete cascade (مش موجود)
- */
-async function adminDeleteCategory(req, res) {
-  try {
-    const id = Number(req.params.id);
-    if (!Number.isFinite(id) || id <= 0) {
-      return res.status(400).json({ error: "Invalid category id" });
-    }
+  await query("UPDATE categories SET name=? WHERE id=?", [name, id]);
 
-    const exists = await query("SELECT id FROM categories WHERE id=? LIMIT 1", [
-      id,
-    ]);
-    if (!exists.length)
-      return res.status(404).json({ error: "Category not found" });
+  const updated = await query(
+    "SELECT id, name FROM categories WHERE id=? LIMIT 1",
+    [id],
+  );
 
-    const used = await query(
-      "SELECT id FROM items WHERE category_id=? LIMIT 1",
-      [id],
+  res.json({ message: "✅ Category updated", category: updated[0] });
+});
+
+const adminDeleteCategory = asyncHandler(async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id) || id <= 0)
+    throw httpError(400, "Invalid category id");
+
+  const exists = await query("SELECT id FROM categories WHERE id=? LIMIT 1", [
+    id,
+  ]);
+  if (!exists.length) throw httpError(404, "Category not found");
+
+  const used = await query("SELECT id FROM items WHERE category_id=? LIMIT 1", [
+    id,
+  ]);
+  if (used.length) {
+    throw httpError(
+      409,
+      "Cannot delete category: it has items. Delete/move items first.",
     );
-    if (used.length) {
-      return res.status(409).json({
-        error: "Cannot delete category: it has items. Delete/move items first.",
-      });
-    }
-
-    await query("DELETE FROM categories WHERE id=?", [id]);
-    return res.json({ message: "✅ Category deleted" });
-  } catch (e) {
-    return res.status(500).json({ error: e.message });
   }
-}
 
-// ✅ NEW: list categories
-async function adminListCategories(req, res) {
-  try {
-    const q = String(req.query.q || "")
-      .trim()
-      .toLowerCase();
+  await query("DELETE FROM categories WHERE id=?", [id]);
+  res.json({ message: "✅ Category deleted" });
+});
 
-    if (q) {
-      const rows = await query(
-        "SELECT id, name FROM categories WHERE LOWER(name) LIKE ? ORDER BY id",
-        [`%${q}%`],
-      );
-      return res.json(rows);
-    }
+const adminListCategories = asyncHandler(async (req, res) => {
+  const q = String(req.query.q || "")
+    .trim()
+    .toLowerCase();
 
-    const rows = await query("SELECT id, name FROM categories ORDER BY id");
-    return res.json(rows);
-  } catch (e) {
-    return res.status(500).json({ error: e.message });
-  }
-}
-
-// ✅ NEW: get category by id
-async function adminGetCategoryById(req, res) {
-  try {
-    const id = Number(req.params.id);
-    if (!Number.isFinite(id) || id <= 0) {
-      return res.status(400).json({ error: "Invalid category id" });
-    }
-
+  if (q) {
     const rows = await query(
-      "SELECT id, name FROM categories WHERE id=? LIMIT 1",
-      [id],
+      "SELECT id, name FROM categories WHERE LOWER(name) LIKE ? ORDER BY id",
+      [`%${q}%`],
     );
-
-    if (!rows.length)
-      return res.status(404).json({ error: "Category not found" });
-    return res.json(rows[0]);
-  } catch (e) {
-    return res.status(500).json({ error: e.message });
+    return res.json(rows);
   }
-}
+
+  const rows = await query("SELECT id, name FROM categories ORDER BY id");
+  res.json(rows);
+});
+
+const adminGetCategoryById = asyncHandler(async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id) || id <= 0)
+    throw httpError(400, "Invalid category id");
+
+  const rows = await query(
+    "SELECT id, name FROM categories WHERE id=? LIMIT 1",
+    [id],
+  );
+
+  if (!rows.length) throw httpError(404, "Category not found");
+  res.json(rows[0]);
+});
 
 module.exports = {
   adminCreateCategory,
