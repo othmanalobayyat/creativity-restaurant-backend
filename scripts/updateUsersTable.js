@@ -1,4 +1,4 @@
-// updateUsersTable.js
+// scripts/updateUsersTable.js
 require("dotenv").config();
 const mysql = require("mysql2/promise");
 

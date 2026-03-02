@@ -1,0 +1,12 @@
+const router = require("express").Router();
+
+router.use(require("./auth.routes"));
+router.use(require("./me.routes"));
+router.use(require("./menu.routes"));
+router.use(require("./address.routes"));
+router.use(require("./orders.routes"));
+router.use(require("./upload.routes"));
+router.use(require("./admin.routes"));
+router.use(require("./uploadCloudinary.routes"));
+
+module.exports = router;

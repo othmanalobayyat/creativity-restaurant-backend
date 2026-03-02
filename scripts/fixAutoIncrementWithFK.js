@@ -1,4 +1,4 @@
-// fixAutoIncrementWithFK.js
+// scripts/fixAutoIncrementWithFK.js
 const path = require("path");
 require("dotenv").config({ path: path.join(__dirname, ".env") });
 
