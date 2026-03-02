@@ -10,4 +10,9 @@ router.use(require("./upload.routes"));
 router.use(require("./admin.routes"));
 router.use(require("./uploadCloudinary.routes"));
 
+// ✅ Dev routes only when enabled (safe for production)
+if (process.env.ENABLE_DEV_ROUTES === "true") {
+  router.use(require("./dev.routes"));
+}
+
 module.exports = router;
