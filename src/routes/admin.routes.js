@@ -34,6 +34,7 @@ const {
 we can apply it to all routes in this router using this line. 
 This way, all routes defined below will require authentication 
 and admin access.router.use(auth, adminOnly);*/
+router.use("/admin", auth, adminOnly);
 
 // Orders
 router.get("/admin/orders", adminListOrders);

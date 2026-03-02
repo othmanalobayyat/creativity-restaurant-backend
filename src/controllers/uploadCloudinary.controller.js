@@ -1,3 +1,4 @@
+// src/controllers/uploadCloudinary.controller.js
 const cloudinary = require("../config/cloudinary");
 const asyncHandler = require("../utils/asyncHandler");
 const { httpError } = require("../utils/httpError");

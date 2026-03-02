@@ -1,3 +1,4 @@
+// controllers/menu.controller.js
 const { query } = require("../db/db");
 const asyncHandler = require("../utils/asyncHandler");
 const { httpError } = require("../utils/httpError");

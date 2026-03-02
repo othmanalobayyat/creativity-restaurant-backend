@@ -1,3 +1,4 @@
+// src/middleware/errorHandler.js
 function errorHandler(err, req, res, next) {
   // ✅ مهم لك أنت: تشوف الخطأ الحقيقي بالـ logs
   console.error("❌ ERROR:", err);
