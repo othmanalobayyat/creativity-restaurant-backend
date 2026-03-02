@@ -1,5 +1,7 @@
 // src/controllers/adminOrders.controller.js
 const { query } = require("../db/db");
+const asyncHandler = require("../utils/asyncHandler");
+const { httpError } = require("../utils/httpError");
 
 const ALLOWED_STATUSES = [
   "PENDING",
@@ -18,134 +20,123 @@ const ALLOWED_STATUSES = [
  *  - limit=number (default 50, max 200)
  *  - offset=number (default 0)
  */
-async function adminListOrders(req, res) {
-  try {
-    const status = String(req.query.status || "")
-      .trim()
-      .toUpperCase();
-    const q = String(req.query.q || "").trim();
+const adminListOrders = asyncHandler(async (req, res) => {
+  const status = String(req.query.status || "")
+    .trim()
+    .toUpperCase();
+  const q = String(req.query.q || "").trim();
 
-    // ✅ robust parsing (prevents NaN/undefined)
-    let limit = parseInt(req.query.limit, 10);
-    let offset = parseInt(req.query.offset, 10);
+  let limit = parseInt(req.query.limit, 10);
+  let offset = parseInt(req.query.offset, 10);
 
-    if (!Number.isFinite(limit)) limit = 50;
-    if (!Number.isFinite(offset)) offset = 0;
+  if (!Number.isFinite(limit)) limit = 50;
+  if (!Number.isFinite(offset)) offset = 0;
 
-    limit = Math.min(200, Math.max(1, limit));
-    offset = Math.max(0, offset);
+  limit = Math.min(200, Math.max(1, limit));
+  offset = Math.max(0, offset);
 
-    let where = "WHERE 1=1";
-    const params = [];
+  let where = "WHERE 1=1";
+  const params = [];
 
-    if (status) {
-      if (!ALLOWED_STATUSES.includes(status)) {
-        return res.status(400).json({ error: "Invalid status filter" });
-      }
-      where += " AND o.status = ?";
-      params.push(status);
+  if (status) {
+    if (!ALLOWED_STATUSES.includes(status)) {
+      throw httpError(400, "Invalid status filter");
     }
-
-    if (q) {
-      const maybeId = Number(q);
-      if (Number.isFinite(maybeId) && maybeId > 0) {
-        where += " AND o.id = ?";
-        params.push(maybeId);
-      } else {
-        where += " AND (LOWER(u.email) LIKE ? OR LOWER(u.full_name) LIKE ?)";
-        const qq = `%${q.toLowerCase()}%`;
-        params.push(qq, qq);
-      }
-    }
-
-    // total count
-    const countRows = await query(
-      `
-      SELECT COUNT(*) AS total
-      FROM orders o
-      JOIN users u ON u.id = o.user_id
-      ${where}
-      `,
-      params,
-    );
-
-    const total = Number(countRows?.[0]?.total || 0);
-
-    // ✅ IMPORTANT: no placeholders for LIMIT/OFFSET (fixes stmt_execute args errors)
-    const rows = await query(
-      `
-      SELECT
-        o.id,
-        o.user_id,
-        o.status,
-        o.total,
-        o.city,
-        o.street,
-        o.created_at,
-        u.full_name AS userFullName,
-        u.email AS userEmail,
-        u.phone AS userPhone,
-        (
-          SELECT COUNT(*)
-          FROM order_items oi
-          WHERE oi.order_id = o.id
-        ) AS itemsCount
-      FROM orders o
-      JOIN users u ON u.id = o.user_id
-      ${where}
-      ORDER BY o.created_at DESC
-      LIMIT ${limit} OFFSET ${offset}
-      `,
-      params,
-    );
-
-    return res.json({
-      total,
-      limit,
-      offset,
-      orders: rows,
-    });
-  } catch (e) {
-    return res.status(500).json({ error: e.message });
+    where += " AND o.status = ?";
+    params.push(status);
   }
-}
+
+  if (q) {
+    const maybeId = Number(q);
+    if (Number.isFinite(maybeId) && maybeId > 0) {
+      where += " AND o.id = ?";
+      params.push(maybeId);
+    } else {
+      where += " AND (LOWER(u.email) LIKE ? OR LOWER(u.full_name) LIKE ?)";
+      const qq = `%${q.toLowerCase()}%`;
+      params.push(qq, qq);
+    }
+  }
+
+  const countRows = await query(
+    `
+    SELECT COUNT(*) AS total
+    FROM orders o
+    JOIN users u ON u.id = o.user_id
+    ${where}
+    `,
+    params,
+  );
+  const total = Number(countRows?.[0]?.total || 0);
+
+  // ✅ IMPORTANT: no placeholders for LIMIT/OFFSET (keeps your fix)
+  const rows = await query(
+    `
+    SELECT
+      o.id,
+      o.user_id,
+      o.status,
+      o.total,
+      o.city,
+      o.street,
+      o.created_at,
+      u.full_name AS userFullName,
+      u.email AS userEmail,
+      u.phone AS userPhone,
+      (
+        SELECT COUNT(*)
+        FROM order_items oi
+        WHERE oi.order_id = o.id
+      ) AS itemsCount
+    FROM orders o
+    JOIN users u ON u.id = o.user_id
+    ${where}
+    ORDER BY o.created_at DESC
+    LIMIT ${limit} OFFSET ${offset}
+    `,
+    params,
+  );
+
+  res.json({
+    total,
+    limit,
+    offset,
+    orders: rows,
+  });
+});
 
 /**
  * PUT /api/admin/orders/:id/status
  * body: { status: "PROCESSING" | "REJECTED" | "COMPLETED" | "PENDING" | "DELIVERY" | "DELIVERED" }
  */
-async function adminUpdateOrderStatus(req, res) {
-  try {
-    const orderId = Number(req.params.id);
-    if (!Number.isFinite(orderId) || orderId <= 0) {
-      return res.status(400).json({ error: "Invalid order id" });
-    }
-
-    const status = String(req.body.status || "")
-      .trim()
-      .toUpperCase();
-    if (!ALLOWED_STATUSES.includes(status)) {
-      return res.status(400).json({ error: "Invalid status" });
-    }
-
-    const exists = await query("SELECT id FROM orders WHERE id=? LIMIT 1", [
-      orderId,
-    ]);
-    if (!exists.length) {
-      return res.status(404).json({ error: "Order not found" });
-    }
-
-    await query("UPDATE orders SET status=? WHERE id=?", [status, orderId]);
-
-    const updated = await query(
-      "SELECT id, user_id, status, total, city, street, created_at FROM orders WHERE id=? LIMIT 1",
-      [orderId],
-    );
-
-    return res.json({ message: "✅ Status updated", order: updated[0] });
-  } catch (e) {
-    return res.status(500).json({ error: e.message });
+const adminUpdateOrderStatus = asyncHandler(async (req, res) => {
+  const orderId = Number(req.params.id);
+  if (!Number.isFinite(orderId) || orderId <= 0) {
+    throw httpError(400, "Invalid order id");
   }
-}
+
+  const status = String(req.body.status || "")
+    .trim()
+    .toUpperCase();
+  if (!ALLOWED_STATUSES.includes(status)) {
+    throw httpError(400, "Invalid status");
+  }
+
+  const exists = await query("SELECT id FROM orders WHERE id=? LIMIT 1", [
+    orderId,
+  ]);
+  if (!exists.length) {
+    throw httpError(404, "Order not found");
+  }
+
+  await query("UPDATE orders SET status=? WHERE id=?", [status, orderId]);
+
+  const updated = await query(
+    "SELECT id, user_id, status, total, city, street, created_at FROM orders WHERE id=? LIMIT 1",
+    [orderId],
+  );
+
+  res.json({ message: "✅ Status updated", order: updated[0] });
+});
 
 module.exports = { adminListOrders, adminUpdateOrderStatus };
