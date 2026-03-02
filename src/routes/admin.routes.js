@@ -2,10 +2,8 @@
 const router = require("express").Router();
 const { auth } = require("../middleware/auth");
 const { adminOnly } = require("../middleware/adminOnly");
+
 const { adminDashboard } = require("../controllers/adminDashboard.controller");
-const {
-  adminToggleProductActive,
-} = require("../controllers/adminProducts.controller");
 
 // Orders
 const {
@@ -18,8 +16,9 @@ const {
   adminCreateProduct,
   adminUpdateProduct,
   adminDeleteProduct,
-  adminListProducts, // ✅ NEW
-  adminGetProductById, // ✅ NEW (اختياري بس مفيد)
+  adminListProducts,
+  adminGetProductById,
+  adminToggleProductActive,
 } = require("../controllers/adminProducts.controller");
 
 // Categories
@@ -27,35 +26,35 @@ const {
   adminCreateCategory,
   adminUpdateCategory,
   adminDeleteCategory,
-  adminListCategories, // ✅ NEW
-  adminGetCategoryById, // ✅ NEW (اختياري)
+  adminListCategories,
+  adminGetCategoryById,
 } = require("../controllers/adminCategories.controller");
 
+/* rarather than repeating auth and adminOnly for each route, 
+we can apply it to all routes in this router using this line. 
+This way, all routes defined below will require authentication 
+and admin access.router.use(auth, adminOnly);*/
+
 // Orders
-router.get("/admin/orders", auth, adminOnly, adminListOrders);
-router.put("/admin/orders/:id/status", auth, adminOnly, adminUpdateOrderStatus);
+router.get("/admin/orders", adminListOrders);
+router.put("/admin/orders/:id/status", adminUpdateOrderStatus);
 
 // Products
-router.get("/admin/products", auth, adminOnly, adminListProducts); // ✅
-router.get("/admin/products/:id", auth, adminOnly, adminGetProductById); // ✅
-router.post("/admin/products", auth, adminOnly, adminCreateProduct);
-router.put("/admin/products/:id", auth, adminOnly, adminUpdateProduct);
-router.put(
-  "/admin/products/:id/toggle-active",
-  auth,
-  adminOnly,
-  adminToggleProductActive,
-);
-router.delete("/admin/products/:id", auth, adminOnly, adminDeleteProduct);
+router.get("/admin/products", adminListProducts);
+router.get("/admin/products/:id", adminGetProductById);
+router.post("/admin/products", adminCreateProduct);
+router.put("/admin/products/:id", adminUpdateProduct);
+router.put("/admin/products/:id/toggle-active", adminToggleProductActive);
+router.delete("/admin/products/:id", adminDeleteProduct);
 
 // Categories
-router.get("/admin/categories", auth, adminOnly, adminListCategories); // ✅
-router.get("/admin/categories/:id", auth, adminOnly, adminGetCategoryById); // ✅
-router.post("/admin/categories", auth, adminOnly, adminCreateCategory);
-router.put("/admin/categories/:id", auth, adminOnly, adminUpdateCategory);
-router.delete("/admin/categories/:id", auth, adminOnly, adminDeleteCategory);
+router.get("/admin/categories", adminListCategories);
+router.get("/admin/categories/:id", adminGetCategoryById);
+router.post("/admin/categories", adminCreateCategory);
+router.put("/admin/categories/:id", adminUpdateCategory);
+router.delete("/admin/categories/:id", adminDeleteCategory);
 
 // Dashboard
-router.get("/admin/dashboard", auth, adminOnly, adminDashboard);
+router.get("/admin/dashboard", adminDashboard);
 
 module.exports = router;
