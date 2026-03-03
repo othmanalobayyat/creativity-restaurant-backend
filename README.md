@@ -85,3 +85,151 @@ Includes optional **Cloudinary upload** support for product images.
 ├── .gitignore
 └── README.md
 ```
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- Node.js installed
+- A MySQL database (local or hosted e.g., Railway)
+- (Optional) Cloudinary account for image uploads
+
+### Installation
+
+```bash
+npm install
+```
+
+### Environment Variables
+
+Create a .env file in project root:
+communicate with me to get the file cotent
+
+.env is ignored by git via .gitignore.
+
+### Running the Server
+
+Development (auto reload)
+
+```bash
+npm run dev
+```
+
+Production
+
+```bash
+npm start
+```
+
+Server starts on:
+
+http://localhost:5000 (or PORT)
+
+Health endpoint:
+
+GET / → Backend is running ✅
+
+---
+
+### Authentication
+
+Protected endpoints require:
+Header
+
+```bash
+Authorization: Bearer <JWT_TOKEN>
+```
+
+---
+
+### API Endpoints
+
+Auth
+
+POST /api/auth/register
+
+POST /api/auth/login
+
+PUT /api/auth/change-password (Auth)
+
+Current User
+
+GET /api/me (Auth)
+
+PUT /api/me (Auth)
+
+Menu (Public)
+
+GET /api/categories
+
+GET /api/items?search=&categoryId=
+
+GET /api/items/:id
+
+Address (User)
+
+GET /api/me/address (Auth)
+
+PUT /api/me/address (Auth)
+
+Orders (User)
+
+POST /api/orders (Auth)
+
+GET /api/me/orders (Auth)
+
+GET /api/orders/:id (Auth)
+
+Upload (Local)
+
+POST /api/upload (multipart/form-data file)
+
+Upload (Cloudinary)
+
+POST /api/admin/upload (Auth + Admin)
+
+body: { base64: "data:image/..." }
+
+---
+
+### Admin Endpoints (Auth + Admin)
+
+Dashboard
+
+GET /api/admin/dashboard
+
+Categories
+
+GET /api/admin/categories?q=
+
+GET /api/admin/categories/:id
+
+POST /api/admin/categories
+
+PUT /api/admin/categories/:id
+
+DELETE /api/admin/categories/:id
+
+Products
+
+GET /api/admin/products?q=&categoryId=&limit=&offset=
+
+GET /api/admin/products/:id
+
+POST /api/admin/products
+
+PUT /api/admin/products/:id
+
+PUT /api/admin/products/:id/toggle-active
+
+DELETE /api/admin/products/:id
+
+Orders
+
+GET /api/admin/orders?status=&q=&limit=&offset=
+
+PUT /api/admin/orders/:id/status
+
+To Be Continued
