@@ -106,6 +106,60 @@ const adminListOrders = asyncHandler(async (req, res) => {
 });
 
 /**
+ * GET /api/admin/orders/:id
+ * returns: { order, items }
+ */
+const adminGetOrderDetails = asyncHandler(async (req, res) => {
+  const orderId = Number(req.params.id);
+  if (!Number.isFinite(orderId) || orderId <= 0) {
+    throw httpError(400, "Invalid order id");
+  }
+
+  // ✅ Order + user info (useful for admin)
+  const orderRows = await query(
+    `
+    SELECT
+      o.id,
+      o.user_id,
+      o.status,
+      o.total,
+      o.city,
+      o.street,
+      o.created_at,
+      u.full_name AS userFullName,
+      u.email AS userEmail,
+      u.phone AS userPhone
+    FROM orders o
+    JOIN users u ON u.id = o.user_id
+    WHERE o.id=?
+    LIMIT 1
+    `,
+    [orderId],
+  );
+
+  if (!orderRows.length) throw httpError(404, "Order not found");
+
+  // ✅ Items (same shape as user OrderDetailsScreen expects)
+  const items = await query(
+    `
+    SELECT
+      oi.item_id,
+      oi.quantity,
+      oi.price,
+      i.name,
+      i.image_url AS image
+    FROM order_items oi
+    JOIN items i ON i.id = oi.item_id
+    WHERE oi.order_id = ?
+    ORDER BY oi.id
+    `,
+    [orderId],
+  );
+
+  res.json({ order: orderRows[0], items });
+});
+
+/**
  * PUT /api/admin/orders/:id/status
  * body: { status: "PROCESSING" | "REJECTED" | "COMPLETED" | "PENDING" | "DELIVERY" | "DELIVERED" }
  */
@@ -139,4 +193,8 @@ const adminUpdateOrderStatus = asyncHandler(async (req, res) => {
   res.json({ message: "✅ Status updated", order: updated[0] });
 });
 
-module.exports = { adminListOrders, adminUpdateOrderStatus };
+module.exports = {
+  adminListOrders,
+  adminGetOrderDetails,
+  adminUpdateOrderStatus,
+};

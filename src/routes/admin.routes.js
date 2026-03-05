@@ -9,6 +9,7 @@ const { adminDashboard } = require("../controllers/adminDashboard.controller");
 const {
   adminListOrders,
   adminUpdateOrderStatus,
+  adminGetOrderDetails,
 } = require("../controllers/adminOrders.controller");
 
 // Products
@@ -39,7 +40,7 @@ router.use("/admin", auth, adminOnly);
 // Orders
 router.get("/admin/orders", adminListOrders);
 router.put("/admin/orders/:id/status", adminUpdateOrderStatus);
-
+router.get("/admin/orders/:id", adminGetOrderDetails);
 // Products
 router.get("/admin/products", adminListProducts);
 router.get("/admin/products/:id", adminGetProductById);
