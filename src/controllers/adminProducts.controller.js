@@ -34,7 +34,7 @@ const adminCreateProduct = asyncHandler(async (req, res) => {
   ]);
   if (!cat.length) throw httpError(400, "Invalid category_id");
 
-  await query(
+  const insertResult = await query(
     `INSERT INTO items
       (name, price, quantity, image_url, description, category_id, is_active)
      VALUES (?, ?, ?, ?, ?, ?, 1)`,
@@ -50,7 +50,8 @@ const adminCreateProduct = asyncHandler(async (req, res) => {
 
   const created = await query(
     `SELECT id, name, price, quantity, image_url, description, category_id, is_active, created_at
-     FROM items WHERE id = LAST_INSERT_ID() LIMIT 1`,
+     FROM items WHERE id = ? LIMIT 1`,
+    [insertResult.insertId],
   );
 
   res.json({ message: "✅ Product created", product: created[0] });
