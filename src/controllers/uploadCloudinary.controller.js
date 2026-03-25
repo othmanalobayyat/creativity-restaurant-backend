@@ -8,7 +8,6 @@ const uploadToCloudinary = asyncHandler(async (req, res) => {
   if (!base64) throw httpError(400, "base64 is required");
 
   const result = await cloudinary.uploader.upload(base64, {
-    upload_preset: "creativity-products",
     folder: "creativity-restaurant",
   });
 
