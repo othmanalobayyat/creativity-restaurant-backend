@@ -1,4 +1,4 @@
-const { query } = require("../db/db");
+const { query, withTransaction } = require("../db/db");
 const { httpError } = require("../utils/httpError");
 
 async function createOrder({ userId, items, addressOverride }) {
@@ -11,7 +11,7 @@ async function createOrder({ userId, items, addressOverride }) {
   let street = "";
 
   // address override OR default address
-  if (override && override.city && override.street) {
+  if (override?.city && override?.street) {
     city = String(override.city).trim();
     street = String(override.street).trim();
   } else {
@@ -61,24 +61,28 @@ async function createOrder({ userId, items, addressOverride }) {
     total += price * qty;
   }
 
-  // Create order
-  const r = await query(
-    "INSERT INTO orders (user_id, total, city, street) VALUES (?, ?, ?, ?)",
-    [userId, total, city, street],
-  );
-  const orderId = r.insertId;
-
-  // Insert order items
-  for (const it of safeItems) {
-    const id = Number(it.itemId);
-    const qty = Math.max(1, Number(it.quantity || 1));
-    const price = priceMap.get(id);
-
-    await query(
-      "INSERT INTO order_items (order_id, item_id, quantity, price) VALUES (?, ?, ?, ?)",
-      [orderId, id, qty, price],
+  const { orderId } = await withTransaction(async (tx) => {
+    // Create order
+    const r = await tx.query(
+      "INSERT INTO orders (user_id, total, city, street) VALUES (?, ?, ?, ?)",
+      [userId, total, city, street],
     );
-  }
+    const orderId = r.insertId;
+
+    // Insert order items
+    for (const it of safeItems) {
+      const id = Number(it.itemId);
+      const qty = Math.max(1, Number(it.quantity || 1));
+      const price = priceMap.get(id);
+
+      await tx.query(
+        "INSERT INTO order_items (order_id, item_id, quantity, price) VALUES (?, ?, ?, ?)",
+        [orderId, id, qty, price],
+      );
+    }
+
+    return { orderId };
+  });
 
   return {
     orderId,
