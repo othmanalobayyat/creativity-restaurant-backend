@@ -37,28 +37,45 @@ async function createOrder({ userId, items, addressOverride }) {
   const placeholders = ids.map(() => "?").join(",");
 
   const dbItems = await query(
-    `SELECT id, price FROM items WHERE id IN (${placeholders})`,
+    `SELECT id, price, quantity, is_active FROM items WHERE id IN (${placeholders})`,
     ids,
   );
 
-  const priceMap = new Map(dbItems.map((x) => [Number(x.id), Number(x.price)]));
+  const itemMap = new Map(
+    dbItems.map((x) => [
+      Number(x.id),
+      { price: Number(x.price), stock: Number(x.quantity), active: !!x.is_active },
+    ]),
+  );
 
   let total = 0;
 
   for (const it of safeItems) {
     const id = Number(it.itemId);
-    const qty = Math.max(1, Number(it.quantity || 1));
+    const qty = Number(it.quantity);
 
     if (!Number.isFinite(id) || id <= 0) {
       throw httpError(400, `Invalid itemId ${it.itemId}`);
     }
 
-    const price = priceMap.get(id);
-    if (price == null) {
+    if (!Number.isFinite(qty) || qty <= 0) {
+      throw httpError(400, `quantity for item ${id} must be a positive number`);
+    }
+
+    const item = itemMap.get(id);
+    if (item == null) {
       throw httpError(400, `Invalid itemId ${id}`);
     }
 
-    total += price * qty;
+    if (!item.active) {
+      throw httpError(400, `Item ${id} is not available`);
+    }
+
+    if (qty > item.stock) {
+      throw httpError(400, `Insufficient stock for item ${id}`);
+    }
+
+    total += item.price * qty;
   }
 
   const { orderId } = await withTransaction(async (tx) => {
@@ -72,12 +89,17 @@ async function createOrder({ userId, items, addressOverride }) {
     // Insert order items
     for (const it of safeItems) {
       const id = Number(it.itemId);
-      const qty = Math.max(1, Number(it.quantity || 1));
-      const price = priceMap.get(id);
+      const qty = Number(it.quantity);
+      const price = itemMap.get(id).price;
 
       await tx.query(
         "INSERT INTO order_items (order_id, item_id, quantity, price) VALUES (?, ?, ?, ?)",
         [orderId, id, qty, price],
+      );
+
+      await tx.query(
+        "UPDATE items SET quantity = quantity - ? WHERE id = ?",
+        [qty, id],
       );
     }
 
