@@ -43,18 +43,17 @@ const updateMe = asyncHandler(async (req, res) => {
     }
   }
 
+  const emailSet = emailVal != null ? ", email = ?" : "";
+  const params = [
+    String(fullName).trim(),
+    phone ? String(phone).trim() : null,
+    ...(emailVal != null ? [emailVal] : []),
+    req.userId,
+  ];
+
   await query(
-    `UPDATE users
-     SET full_name = ?,
-         phone = ?,
-         email = ?
-     WHERE id = ?`,
-    [
-      String(fullName).trim(),
-      phone ? String(phone).trim() : null,
-      emailVal,
-      req.userId,
-    ],
+    `UPDATE users SET full_name = ?, phone = ?${emailSet} WHERE id = ?`,
+    params,
   );
 
   const rows = await query(
