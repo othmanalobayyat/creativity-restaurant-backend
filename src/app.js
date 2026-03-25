@@ -19,6 +19,8 @@ app.get("/", (req, res) => res.send("Backend is running ✅"));
 
 app.use("/api", require("./routes"));
 
+app.use((req, res) => res.status(404).json({ error: "Not found" }));
+
 app.use(errorHandler);
 
 module.exports = app;
