@@ -44,7 +44,11 @@ async function createOrder({ userId, items, addressOverride }) {
   const itemMap = new Map(
     dbItems.map((x) => [
       Number(x.id),
-      { price: Number(x.price), stock: Number(x.quantity), active: !!x.is_active },
+      {
+        price: Number(x.price),
+        stock: Number(x.quantity),
+        active: !!x.is_active,
+      },
     ]),
   );
 
@@ -64,15 +68,15 @@ async function createOrder({ userId, items, addressOverride }) {
 
     const item = itemMap.get(id);
     if (item == null) {
-      throw httpError(400, `Invalid itemId ${id}`);
+      throw httpError(400, "One or more items are no longer available");
     }
 
     if (!item.active) {
-      throw httpError(400, `Item ${id} is not available`);
+      throw httpError(400, "One or more items are no longer available");
     }
 
     if (qty > item.stock) {
-      throw httpError(400, `Insufficient stock for item ${id}`);
+      throw httpError(400, "One or more items exceed available stock");
     }
 
     total += item.price * qty;
@@ -97,10 +101,10 @@ async function createOrder({ userId, items, addressOverride }) {
         [orderId, id, qty, price],
       );
 
-      await tx.query(
-        "UPDATE items SET quantity = quantity - ? WHERE id = ?",
-        [qty, id],
-      );
+      await tx.query("UPDATE items SET quantity = quantity - ? WHERE id = ?", [
+        qty,
+        id,
+      ]);
     }
 
     return { orderId };

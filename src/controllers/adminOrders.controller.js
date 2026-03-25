@@ -176,11 +176,28 @@ const adminUpdateOrderStatus = asyncHandler(async (req, res) => {
     throw httpError(400, "Invalid status");
   }
 
-  const exists = await query("SELECT id FROM orders WHERE id=? LIMIT 1", [
-    orderId,
-  ]);
+  const exists = await query(
+    "SELECT id, status FROM orders WHERE id=? LIMIT 1",
+    [orderId],
+  );
   if (!exists.length) {
     throw httpError(404, "Order not found");
+  }
+
+  const previousStatus = String(exists[0].status || "").toUpperCase();
+
+  if (status === "REJECTED" && previousStatus !== "REJECTED") {
+    const orderItems = await query(
+      "SELECT item_id, quantity FROM order_items WHERE order_id=?",
+      [orderId],
+    );
+
+    for (const item of orderItems) {
+      await query("UPDATE items SET quantity = quantity + ? WHERE id = ?", [
+        Number(item.quantity) || 0,
+        Number(item.item_id),
+      ]);
+    }
   }
 
   await query("UPDATE orders SET status=? WHERE id=?", [status, orderId]);
