@@ -1,8 +1,8 @@
 # Creativity Restaurant Backend API
 
-A RESTful API built with **Node.js** and **Express** for a restaurant mobile application.  
-It provides **JWT authentication**, **menu browsing**, **orders management**, **address management**, and a full **admin panel** for managing products, categories, and orders.  
-Includes optional **Cloudinary upload** support for product images.
+A RESTful API built with **Node.js** and **Express** for a full-stack restaurant ordering system, developed as a university project and extended as a portfolio piece.
+It provides **JWT authentication**, **menu browsing with stock management**, **order creation with real-time stock validation and decrement**, **address management**, and a full **admin panel** for managing products, categories, and orders.
+Product images are uploaded via **Cloudinary**, proxied through the backend so no credentials are exposed to clients.
 
 ---
 
@@ -47,10 +47,6 @@ Includes optional **Cloudinary upload** support for product images.
 
 - Local upload endpoint using Multer (`/api/upload`)
 - Cloudinary upload endpoint for admins (`/api/admin/upload`)
-
-### Developer Utilities (Optional)
-
-- Seed items endpoint (only if enabled by env flag)
 
 ---
 
@@ -98,14 +94,40 @@ Includes optional **Cloudinary upload** support for product images.
 
 ### Installation
 
-```bash
-npm install
-```
+1. Clone and install dependencies:
+
+   ```bash
+   npm install
+   ```
+
+2. Create `.env` with database and Cloudinary credentials (see `.env.example`)
+
+3. Run database migrations:
+
+   ```bash
+   npm run migrate
+   ```
+
+4. Start the server:
+   ```bash
+   npm run dev
+   ```
 
 ### Environment Variables
 
-Create a .env file in project root:
-communicate with me to get the file cotent
+Create a `.env` file in the project root:
+
+```
+PORT=5000
+DB_HOST=localhost
+DB_USER=your_db_user
+DB_PASSWORD=your_db_password
+DB_NAME=creativity_restaurant
+JWT_SECRET=your_jwt_secret
+CLOUDINARY_CLOUD_NAME=your_cloud_name
+CLOUDINARY_API_KEY=your_api_key
+CLOUDINARY_API_SECRET=your_api_secret
+```
 
 .env is ignored by git via .gitignore.
 
@@ -231,5 +253,3 @@ Orders
 GET /api/admin/orders?status=&q=&limit=&offset=
 
 PUT /api/admin/orders/:id/status
-
-To Be Continued
