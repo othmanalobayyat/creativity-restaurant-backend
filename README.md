@@ -1,6 +1,6 @@
 # Creativity Restaurant Backend API
 
-A RESTful API built with **Node.js** and **Express** for a full-stack restaurant ordering system, developed as a university project and extended as a portfolio piece.
+A RESTful API built with **Node.js** and **Express** for a full-stack restaurant ordering system, developed as a university project and extended as a portfolio piece. This is a portfolio/demo version and can be extended or customized for real-world deployments.
 It provides **JWT authentication**, **menu browsing with stock management**, **order creation with real-time stock validation and decrement**, **address management**, and a full **admin panel** for managing products, categories, and orders.
 Product images are uploaded via **Cloudinary**, proxied through the backend so no credentials are exposed to clients.
 
@@ -253,3 +253,9 @@ Orders
 GET /api/admin/orders?status=&q=&limit=&offset=
 
 PUT /api/admin/orders/:id/status
+
+---
+
+## Usage Notice
+
+This project is shared for portfolio and demonstration purposes only. Commercial use, redistribution, or modification without explicit written permission from the author is not permitted.
