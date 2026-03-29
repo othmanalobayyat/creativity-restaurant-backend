@@ -100,7 +100,7 @@ Product images are uploaded via **Cloudinary**, proxied through the backend so n
    npm install
    ```
 
-2. Create `.env` with database and Cloudinary credentials (see `.env.example`)
+2. Create `.env` with database and Cloudinary credentials (see Environment Variables below)
 
 3. Run database migrations:
 
