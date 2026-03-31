@@ -5,7 +5,12 @@ if (!process.env.DATABASE_URL) {
   console.warn("⚠️ DATABASE_URL is missing");
 }
 
-const pool = mysql.createPool(process.env.DATABASE_URL);
+const pool = mysql.createPool({
+  uri: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false,
+  },
+});
 
 // اختبار اتصال سريع عند التشغيل
 if (process.env.NODE_ENV !== "test") {
