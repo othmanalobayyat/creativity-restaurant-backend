@@ -5,14 +5,6 @@ if (!process.env.DATABASE_URL) {
   console.warn("⚠️ DATABASE_URL is missing");
 }
 
-// Do NOT pass `uri` alongside `ssl` — mysql2's URL parser does not
-// recognise the `ssl-mode=REQUIRED` query parameter (it is a MySQL
-// CLI flag, not a mysql2 option). When both `uri` and `ssl` are
-// given, the parsed URI fields can overwrite the ssl object, leaving
-// the connection without TLS. Aiven then closes it immediately.
-//
-// Fix: parse DATABASE_URL with Node's URL class and pass every field
-// explicitly so the ssl config is never shadowed or ignored.
 const {
   hostname: host,
   port: rawPort,
@@ -23,19 +15,16 @@ const {
 
 const pool = mysql.createPool({
   host,
-  port:     parseInt(rawPort, 10) || 3306,
-  user:     decodeURIComponent(username),
+  port: parseInt(rawPort, 10) || 3306,
+  user: decodeURIComponent(username),
   password: decodeURIComponent(password),
   database: pathname.replace(/^\//, ""),
   ssl: {
-    // Aiven uses a custom CA not in Node's built-in bundle.
-    // The connection is still fully encrypted; we only skip
-    // certificate chain validation.
     rejectUnauthorized: false,
   },
   waitForConnections: true,
-  connectionLimit:    10,
-  queueLimit:         0,
+  connectionLimit: 10,
+  queueLimit: 0,
 });
 
 // اختبار اتصال سريع عند التشغيل
