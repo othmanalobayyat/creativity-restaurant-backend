@@ -3,25 +3,26 @@ const { query } = require("../db/db");
 const asyncHandler = require("../utils/asyncHandler");
 
 const adminDashboard = asyncHandler(async (req, res) => {
-  // 1) totals
+  // 1) Totals — COALESCE guards against NULL when the table is empty.
+  //    Column aliases are double-quoted so PostgreSQL preserves camelCase.
   const totalsRows = await query(`
     SELECT
-      COUNT(*) AS totalOrders,
+      COUNT(*)                                                        AS "totalOrders",
       COALESCE(
         SUM(CASE WHEN status IN ('DELIVERED','COMPLETED') THEN total ELSE 0 END),
         0
-      ) AS totalRevenue
+      )                                                               AS "totalRevenue"
     FROM orders
   `);
 
-  // 2) by status
+  // 2) Count per status
   const statusRows = await query(`
     SELECT status, COUNT(*) AS count
     FROM orders
     GROUP BY status
   `);
 
-  // 3) last 10 orders
+  // 3) Last 10 orders with user info
   const lastOrders = await query(`
     SELECT
       o.id,
@@ -30,8 +31,8 @@ const adminDashboard = asyncHandler(async (req, res) => {
       o.city,
       o.street,
       o.created_at,
-      u.id AS userId,
-      u.full_name AS fullName,
+      u.id        AS "userId",
+      u.full_name AS "fullName",
       u.email
     FROM orders o
     JOIN users u ON u.id = o.user_id
@@ -42,21 +43,20 @@ const adminDashboard = asyncHandler(async (req, res) => {
   const totals = totalsRows?.[0] || { totalOrders: 0, totalRevenue: 0 };
 
   const byStatus = {
-    PENDING: 0,
+    PENDING:    0,
     PROCESSING: 0,
-    DELIVERY: 0,
-    DELIVERED: 0,
-    COMPLETED: 0,
-    REJECTED: 0,
+    DELIVERY:   0,
+    DELIVERED:  0,
+    COMPLETED:  0,
+    REJECTED:   0,
   };
-
   for (const r of statusRows) {
     if (r?.status) byStatus[r.status] = Number(r.count || 0);
   }
 
   res.json({
     totals: {
-      totalOrders: Number(totals.totalOrders || 0),
+      totalOrders:  Number(totals.totalOrders  || 0),
       totalRevenue: Number(totals.totalRevenue || 0),
     },
     byStatus,

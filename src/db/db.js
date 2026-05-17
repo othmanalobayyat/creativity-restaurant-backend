@@ -1,67 +1,89 @@
 // src/db/db.js
-const mysql = require("mysql2/promise");
+const { Pool, types } = require("pg");
+
+// Parse DECIMAL/NUMERIC (OID 1700) as JavaScript float.
+// pg returns these as strings by default to preserve precision;
+// we accept the float conversion since all prices use DECIMAL(10,2).
+types.setTypeParser(1700, (val) => parseFloat(val));
+
+// Parse INT8/BIGINT (OID 20) as JavaScript integer.
+// COUNT(*) returns int8 in PostgreSQL — this keeps it as a number.
+types.setTypeParser(20, (val) => parseInt(val, 10));
 
 if (!process.env.DATABASE_URL) {
-  console.warn("⚠️ DATABASE_URL is missing");
+  throw new Error(
+    "DATABASE_URL is required — set it in Render environment variables or your local .env file",
+  );
 }
 
-const {
-  hostname: host,
-  port: rawPort,
-  username,
-  password,
-  pathname,
-} = new URL(process.env.DATABASE_URL);
-
-const pool = mysql.createPool({
-  host,
-  port: parseInt(rawPort, 10) || 3306,
-  user: decodeURIComponent(username),
-  password: decodeURIComponent(password),
-  database: pathname.replace(/^\//, ""),
-  ssl: {
-    rejectUnauthorized: false,
-  },
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0,
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  // Required for Supabase: it uses a self-signed certificate.
+  ssl: { rejectUnauthorized: false },
+  max: 10,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 5000,
 });
 
-// اختبار اتصال سريع عند التشغيل
+// Quick connection test at startup
 if (process.env.NODE_ENV !== "test") {
-  (async () => {
-    try {
-      const conn = await pool.getConnection();
-      await conn.ping();
-      conn.release();
-      console.log("✅ Connected to MySQL (pool)");
-    } catch (err) {
-      console.log("❌ Database connection failed:", err.message);
-    }
-  })();
+  pool
+    .connect()
+    .then((client) => {
+      client
+        .query("SELECT 1")
+        .then(() => {
+          console.log("✅ Connected to PostgreSQL (Supabase)");
+          client.release();
+        })
+        .catch((err) => {
+          console.error("❌ DB ping failed:", err.message);
+          client.release();
+        });
+    })
+    .catch((err) => {
+      console.error("❌ Database connection failed:", err.message);
+    });
 }
 
+/**
+ * Run a parameterized query and return the rows array.
+ *   SELECT             → array of row objects
+ *   INSERT RETURNING   → array with inserted row(s)
+ *   INSERT/UPDATE/DELETE without RETURNING → empty array []
+ */
 async function query(sql, params = []) {
-  const [rows] = await pool.execute(sql, params);
+  const { rows } = await pool.query(sql, params);
   return rows;
 }
 
+/**
+ * Run multiple queries inside a single transaction.
+ * Automatically rolls back on any error.
+ *
+ * Usage:
+ *   const result = await withTransaction(async (tx) => {
+ *     const rows = await tx.query("INSERT ... RETURNING id", [...]);
+ *     await tx.query("UPDATE ...", [...]);
+ *     return rows[0].id;
+ *   });
+ */
 async function withTransaction(work) {
-  const conn = await pool.getConnection();
+  const client = await pool.connect();
   try {
-    await conn.beginTransaction();
+    await client.query("BEGIN");
     const tx = {
       query: async (sql, params = []) => {
-        const [rows] = await conn.execute(sql, params);
+        const { rows } = await client.query(sql, params);
         return rows;
       },
     };
     const result = await work(tx);
-    await conn.commit();
+    await client.query("COMMIT");
     return result;
   } catch (err) {
     try {
-      await conn.rollback();
+      await client.query("ROLLBACK");
     } catch (rollbackErr) {
       if (process.env.NODE_ENV !== "test") {
         console.warn("❌ Transaction rollback failed:", rollbackErr.message);
@@ -69,7 +91,7 @@ async function withTransaction(work) {
     }
     throw err;
   } finally {
-    conn.release();
+    client.release();
   }
 }
 

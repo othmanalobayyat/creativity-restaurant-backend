@@ -1,113 +1,100 @@
+// src/services/order.service.js
 const { query, withTransaction } = require("../db/db");
 const { httpError } = require("../utils/httpError");
 
 async function createOrder({ userId, items, addressOverride }) {
   const safeItems = Array.isArray(items) ? items : [];
-  const override = addressOverride;
-
   if (!safeItems.length) throw httpError(400, "items required");
 
+  // Validate item IDs and quantities before opening the transaction
+  const ids = safeItems
+    .map((x) => Number(x.itemId))
+    .filter((v) => Number.isFinite(v) && v > 0);
+  if (!ids.length) throw httpError(400, "items required");
+
+  for (const it of safeItems) {
+    const qty = Number(it.quantity);
+    if (!Number.isFinite(qty) || qty <= 0) {
+      throw httpError(400, `quantity for item ${it.itemId} must be a positive number`);
+    }
+  }
+
+  // Resolve delivery address
   let city = "";
   let street = "";
 
-  // address override OR default address
-  if (override?.city && override?.street) {
-    city = String(override.city).trim();
-    street = String(override.street).trim();
+  if (addressOverride?.city && addressOverride?.street) {
+    city = String(addressOverride.city).trim();
+    street = String(addressOverride.street).trim();
   } else {
     const addr = await query(
-      "SELECT city, street FROM addresses WHERE user_id=? AND is_default=1 LIMIT 1",
+      "SELECT city, street FROM addresses WHERE user_id=$1 AND is_default=TRUE LIMIT 1",
       [userId],
     );
-    if (!addr.length) {
-      throw httpError(400, "No saved address. Set address first.");
-    }
+    if (!addr.length) throw httpError(400, "No saved address. Set address first.");
     city = addr[0].city;
     street = addr[0].street;
   }
 
-  // Validate itemIds
-  const ids = safeItems
-    .map((x) => Number(x.itemId))
-    .filter((v) => Number.isFinite(v) && v > 0);
+  const { orderId, total } = await withTransaction(async (tx) => {
+    // Lock item rows for the duration of this transaction.
+    // FOR UPDATE prevents concurrent orders from reading stale stock.
+    const dbItems = await tx.query(
+      `SELECT id, price, quantity, is_active
+       FROM items
+       WHERE id = ANY($1::int[])
+       FOR UPDATE`,
+      [ids],
+    );
 
-  // ✅ مهم: إذا user بعت items بس كلها invalid
-  if (!ids.length) throw httpError(400, "items required");
+    const itemMap = new Map(
+      dbItems.map((x) => [
+        Number(x.id),
+        {
+          price: Number(x.price),
+          stock: Number(x.quantity),
+          active: !!x.is_active,
+        },
+      ]),
+    );
 
-  const placeholders = ids.map(() => "?").join(",");
+    let total = 0;
 
-  const dbItems = await query(
-    `SELECT id, price, quantity, is_active FROM items WHERE id IN (${placeholders})`,
-    ids,
-  );
+    for (const it of safeItems) {
+      const id = Number(it.itemId);
+      const qty = Number(it.quantity);
 
-  const itemMap = new Map(
-    dbItems.map((x) => [
-      Number(x.id),
-      {
-        price: Number(x.price),
-        stock: Number(x.quantity),
-        active: !!x.is_active,
-      },
-    ]),
-  );
+      const item = itemMap.get(id);
+      if (item == null)  throw httpError(400, "One or more items are no longer available");
+      if (!item.active)  throw httpError(400, "One or more items are no longer available");
+      if (qty > item.stock) throw httpError(400, "One or more items exceed available stock");
 
-  let total = 0;
-
-  for (const it of safeItems) {
-    const id = Number(it.itemId);
-    const qty = Number(it.quantity);
-
-    if (!Number.isFinite(id) || id <= 0) {
-      throw httpError(400, `Invalid itemId ${it.itemId}`);
+      total += item.price * qty;
     }
 
-    if (!Number.isFinite(qty) || qty <= 0) {
-      throw httpError(400, `quantity for item ${id} must be a positive number`);
-    }
-
-    const item = itemMap.get(id);
-    if (item == null) {
-      throw httpError(400, "One or more items are no longer available");
-    }
-
-    if (!item.active) {
-      throw httpError(400, "One or more items are no longer available");
-    }
-
-    if (qty > item.stock) {
-      throw httpError(400, "One or more items exceed available stock");
-    }
-
-    total += item.price * qty;
-  }
-
-  const { orderId } = await withTransaction(async (tx) => {
-    // Create order
     const r = await tx.query(
-      "INSERT INTO orders (user_id, total, city, street) VALUES (?, ?, ?, ?)",
+      "INSERT INTO orders (user_id, total, city, street) VALUES ($1, $2, $3, $4) RETURNING id",
       [userId, total, city, street],
     );
-    const orderId = r.insertId;
+    const orderId = r[0].id;
 
-    // Insert order items
     for (const it of safeItems) {
       const id = Number(it.itemId);
       const qty = Number(it.quantity);
       const price = itemMap.get(id).price;
 
       await tx.query(
-        "INSERT INTO order_items (order_id, item_id, quantity, price) VALUES (?, ?, ?, ?)",
+        "INSERT INTO order_items (order_id, item_id, quantity, price) VALUES ($1, $2, $3, $4)",
         [orderId, id, qty, price],
       );
 
-      await tx.query("UPDATE items SET quantity = quantity - ? WHERE id = ?", [
-        qty,
-        id,
-      ]);
+      await tx.query(
+        "UPDATE items SET quantity = quantity - $1 WHERE id = $2",
+        [qty, id],
+      );
     }
 
-    return { orderId };
+    return { orderId, total };
   });
 
   return {
@@ -120,31 +107,27 @@ async function createOrder({ userId, items, addressOverride }) {
 }
 
 async function getMyOrders(userId) {
-  return await query(
-    "SELECT id, status, total, city, street, created_at FROM orders WHERE user_id=? ORDER BY created_at DESC",
+  return query(
+    "SELECT id, status, total, city, street, created_at FROM orders WHERE user_id=$1 ORDER BY created_at DESC",
     [userId],
   );
 }
 
 async function getOrderDetails({ userId, orderId }) {
   const id = Number(orderId);
-  if (!Number.isFinite(id) || id <= 0) {
-    throw httpError(400, "Invalid order id");
-  }
+  if (!Number.isFinite(id) || id <= 0) throw httpError(400, "Invalid order id");
 
-  // ensure order belongs to user
   const orderRows = await query(
-    "SELECT id, status, total, city, street, created_at FROM orders WHERE id=? AND user_id=? LIMIT 1",
+    "SELECT id, status, total, city, street, created_at FROM orders WHERE id=$1 AND user_id=$2 LIMIT 1",
     [id, userId],
   );
-
   if (!orderRows.length) throw httpError(404, "Order not found");
 
   const items = await query(
     `SELECT oi.item_id, oi.quantity, oi.price, i.name, i.image_url AS image
      FROM order_items oi
      JOIN items i ON i.id = oi.item_id
-     WHERE oi.order_id = ?
+     WHERE oi.order_id = $1
      ORDER BY oi.id`,
     [id],
   );

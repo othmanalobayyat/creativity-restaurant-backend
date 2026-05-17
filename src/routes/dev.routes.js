@@ -1,20 +1,21 @@
 // src/routes/dev.routes.js
+// ⚠️ Only mounted when ENABLE_DEV_ROUTES=true (development only).
+// Never enable in production.
+
 const router = require("express").Router();
 const { query } = require("../db/db");
-
-// ✅ حط بياناتك هنا (انسخ mockData كامل)
 const mockData = require("../data/mockData");
-// ⚠️ إذا هذا المسار مش موجود عندك في BE، اقرأ ملاحظة تحت
 
 router.get("/seed-items", async (req, res) => {
   try {
     let count = 0;
 
     for (const it of mockData) {
+      // ON CONFLICT (id) DO NOTHING = PostgreSQL equivalent of MySQL's INSERT IGNORE
       await query(
-        `INSERT IGNORE INTO items
-         (id, name, price, quantity, image_url, description, category_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO items (id, name, price, quantity, image_url, description, category_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT (id) DO NOTHING`,
         [
           Number(it.id),
           String(it.name),
@@ -27,6 +28,12 @@ router.get("/seed-items", async (req, res) => {
       );
       count++;
     }
+
+    // Reset the sequence so future auto-increment inserts don't conflict
+    // with the explicitly-seeded IDs above.
+    await query(
+      "SELECT setval('items_id_seq', (SELECT COALESCE(MAX(id), 0) FROM items))",
+    );
 
     res.json({ message: "✅ Items seeded", count });
   } catch (e) {

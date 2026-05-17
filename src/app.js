@@ -9,7 +9,32 @@ require("./db/db");
 const app = express();
 
 app.use(helmet());
-app.use(cors());
+
+// CORS — allow requests from explicitly listed origins.
+// Mobile apps (Expo) send no Origin header so they are always allowed.
+// In development (non-production) all origins are allowed for convenience.
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || "")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // No origin = mobile app, curl, Postman → always allow
+      if (!origin) return callback(null, true);
+      // Explicitly listed origin → allow
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      // Non-production with no allowlist configured → allow (dev convenience)
+      if (process.env.NODE_ENV !== "production" && allowedOrigins.length === 0) {
+        return callback(null, true);
+      }
+      callback(new Error("Not allowed by CORS"));
+    },
+    credentials: true,
+  }),
+);
+
 app.use(express.json({ limit: "15mb" }));
 app.use(express.urlencoded({ extended: true, limit: "15mb" }));
 

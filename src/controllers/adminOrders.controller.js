@@ -4,214 +4,148 @@ const asyncHandler = require("../utils/asyncHandler");
 const { httpError } = require("../utils/httpError");
 
 const ALLOWED_STATUSES = [
-  "PENDING",
-  "PROCESSING",
-  "DELIVERY",
-  "DELIVERED",
-  "COMPLETED",
-  "REJECTED",
+  "PENDING", "PROCESSING", "DELIVERY",
+  "DELIVERED", "COMPLETED", "REJECTED",
 ];
 
-/**
- * GET /api/admin/orders
- * Optional query:
- *  - status=PENDING|PROCESSING|DELIVERY|DELIVERED|REJECTED|COMPLETED
- *  - q=search by user email or name or order id
- *  - limit=number (default 50, max 200)
- *  - offset=number (default 0)
- */
 const adminListOrders = asyncHandler(async (req, res) => {
-  const status = String(req.query.status || "")
-    .trim()
-    .toUpperCase();
-  const q = String(req.query.q || "").trim();
+  const status = String(req.query.status || "").trim().toUpperCase();
+  const q      = String(req.query.q || "").trim();
 
-  let limit = parseInt(req.query.limit, 10);
+  let limit  = parseInt(req.query.limit,  10);
   let offset = parseInt(req.query.offset, 10);
-
-  if (!Number.isFinite(limit)) limit = 50;
+  if (!Number.isFinite(limit))  limit  = 50;
   if (!Number.isFinite(offset)) offset = 0;
-
-  limit = Math.min(200, Math.max(1, limit));
+  limit  = Math.min(200, Math.max(1, limit));
   offset = Math.max(0, offset);
 
-  let where = "WHERE 1=1";
+  const conditions = [];
   const params = [];
+  const p = (val) => { params.push(val); return `$${params.length}`; };
 
   if (status) {
-    if (!ALLOWED_STATUSES.includes(status)) {
-      throw httpError(400, "Invalid status filter");
-    }
-    where += " AND o.status = ?";
-    params.push(status);
+    if (!ALLOWED_STATUSES.includes(status)) throw httpError(400, "Invalid status filter");
+    conditions.push(`o.status = ${p(status)}`);
   }
 
   if (q) {
     const maybeId = Number(q);
     if (Number.isFinite(maybeId) && maybeId > 0) {
-      where += " AND o.id = ?";
-      params.push(maybeId);
+      conditions.push(`o.id = ${p(maybeId)}`);
     } else {
-      where += " AND (LOWER(u.email) LIKE ? OR LOWER(u.full_name) LIKE ?)";
       const qq = `%${q.toLowerCase()}%`;
-      params.push(qq, qq);
+      conditions.push(`(u.email ILIKE ${p(qq)} OR u.full_name ILIKE ${p(qq)})`);
     }
   }
 
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+
   const countRows = await query(
-    `
-    SELECT COUNT(*) AS total
-    FROM orders o
-    JOIN users u ON u.id = o.user_id
-    ${where}
-    `,
+    `SELECT COUNT(*) AS total
+     FROM orders o
+     JOIN users u ON u.id = o.user_id
+     ${where}`,
     params,
   );
   const total = Number(countRows?.[0]?.total || 0);
 
-  // ✅ IMPORTANT: no placeholders for LIMIT/OFFSET (keeps your fix)
   const rows = await query(
-    `
-    SELECT
-      o.id,
-      o.user_id,
-      o.status,
-      o.total,
-      o.city,
-      o.street,
-      o.created_at,
-      u.full_name AS userFullName,
-      u.email AS userEmail,
-      u.phone AS userPhone,
-      (
-        SELECT COUNT(*)
-        FROM order_items oi
-        WHERE oi.order_id = o.id
-      ) AS itemsCount
-    FROM orders o
-    JOIN users u ON u.id = o.user_id
-    ${where}
-    ORDER BY o.created_at DESC
-    LIMIT ${limit} OFFSET ${offset}
-    `,
+    `SELECT
+       o.id,
+       o.user_id,
+       o.status,
+       o.total,
+       o.city,
+       o.street,
+       o.created_at,
+       u.full_name AS "userFullName",
+       u.email     AS "userEmail",
+       u.phone     AS "userPhone",
+       (SELECT COUNT(*) FROM order_items oi WHERE oi.order_id = o.id) AS "itemsCount"
+     FROM orders o
+     JOIN users u ON u.id = o.user_id
+     ${where}
+     ORDER BY o.created_at DESC
+     LIMIT ${limit} OFFSET ${offset}`,
     params,
   );
 
-  res.json({
-    total,
-    limit,
-    offset,
-    orders: rows,
-  });
+  res.json({ total, limit, offset, orders: rows });
 });
 
-/**
- * GET /api/admin/orders/:id
- * returns: { order, items }
- */
 const adminGetOrderDetails = asyncHandler(async (req, res) => {
   const orderId = Number(req.params.id);
-  if (!Number.isFinite(orderId) || orderId <= 0) {
-    throw httpError(400, "Invalid order id");
-  }
+  if (!Number.isFinite(orderId) || orderId <= 0) throw httpError(400, "Invalid order id");
 
-  // ✅ Order + user info (useful for admin)
   const orderRows = await query(
-    `
-    SELECT
-      o.id,
-      o.user_id,
-      o.status,
-      o.total,
-      o.city,
-      o.street,
-      o.created_at,
-      u.full_name AS userFullName,
-      u.email AS userEmail,
-      u.phone AS userPhone
-    FROM orders o
-    JOIN users u ON u.id = o.user_id
-    WHERE o.id=?
-    LIMIT 1
-    `,
+    `SELECT
+       o.id,
+       o.user_id,
+       o.status,
+       o.total,
+       o.city,
+       o.street,
+       o.created_at,
+       u.full_name AS "userFullName",
+       u.email     AS "userEmail",
+       u.phone     AS "userPhone"
+     FROM orders o
+     JOIN users u ON u.id = o.user_id
+     WHERE o.id = $1
+     LIMIT 1`,
     [orderId],
   );
-
   if (!orderRows.length) throw httpError(404, "Order not found");
 
-  // ✅ Items (same shape as user OrderDetailsScreen expects)
   const items = await query(
-    `
-    SELECT
-      oi.item_id,
-      oi.quantity,
-      oi.price,
-      i.name,
-      i.image_url AS image
-    FROM order_items oi
-    JOIN items i ON i.id = oi.item_id
-    WHERE oi.order_id = ?
-    ORDER BY oi.id
-    `,
+    `SELECT oi.item_id, oi.quantity, oi.price, i.name, i.image_url AS image
+     FROM order_items oi
+     JOIN items i ON i.id = oi.item_id
+     WHERE oi.order_id = $1
+     ORDER BY oi.id`,
     [orderId],
   );
 
   res.json({ order: orderRows[0], items });
 });
 
-/**
- * PUT /api/admin/orders/:id/status
- * body: { status: "PROCESSING" | "REJECTED" | "COMPLETED" | "PENDING" | "DELIVERY" | "DELIVERED" }
- */
 const adminUpdateOrderStatus = asyncHandler(async (req, res) => {
   const orderId = Number(req.params.id);
-  if (!Number.isFinite(orderId) || orderId <= 0) {
-    throw httpError(400, "Invalid order id");
-  }
+  if (!Number.isFinite(orderId) || orderId <= 0) throw httpError(400, "Invalid order id");
 
-  const status = String(req.body.status || "")
-    .trim()
-    .toUpperCase();
-  if (!ALLOWED_STATUSES.includes(status)) {
-    throw httpError(400, "Invalid status");
-  }
+  const status = String(req.body.status || "").trim().toUpperCase();
+  if (!ALLOWED_STATUSES.includes(status)) throw httpError(400, "Invalid status");
 
-  const exists = await query(
-    "SELECT id, status FROM orders WHERE id=? LIMIT 1",
+  const existing = await query(
+    "SELECT id, status FROM orders WHERE id=$1 LIMIT 1",
     [orderId],
   );
-  if (!exists.length) {
-    throw httpError(404, "Order not found");
-  }
+  if (!existing.length) throw httpError(404, "Order not found");
 
-  const previousStatus = String(exists[0].status || "").toUpperCase();
+  const previousStatus = String(existing[0].status || "").toUpperCase();
 
+  // Restore stock when an order is rejected (only if it wasn't already rejected)
   if (status === "REJECTED" && previousStatus !== "REJECTED") {
     const orderItems = await query(
-      "SELECT item_id, quantity FROM order_items WHERE order_id=?",
+      "SELECT item_id, quantity FROM order_items WHERE order_id=$1",
       [orderId],
     );
-
     for (const item of orderItems) {
-      await query("UPDATE items SET quantity = quantity + ? WHERE id = ?", [
-        Number(item.quantity) || 0,
-        Number(item.item_id),
-      ]);
+      await query(
+        "UPDATE items SET quantity = quantity + $1 WHERE id = $2",
+        [Number(item.quantity) || 0, Number(item.item_id)],
+      );
     }
   }
 
-  await query("UPDATE orders SET status=? WHERE id=?", [status, orderId]);
+  await query("UPDATE orders SET status=$1 WHERE id=$2", [status, orderId]);
 
   const updated = await query(
-    "SELECT id, user_id, status, total, city, street, created_at FROM orders WHERE id=? LIMIT 1",
+    "SELECT id, user_id, status, total, city, street, created_at FROM orders WHERE id=$1 LIMIT 1",
     [orderId],
   );
 
   res.json({ message: "✅ Status updated", order: updated[0] });
 });
 
-module.exports = {
-  adminListOrders,
-  adminGetOrderDetails,
-  adminUpdateOrderStatus,
-};
+module.exports = { adminListOrders, adminGetOrderDetails, adminUpdateOrderStatus };

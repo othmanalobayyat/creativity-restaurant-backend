@@ -3,21 +3,21 @@ const { query } = require("../db/db");
 const asyncHandler = require("../utils/asyncHandler");
 const { httpError } = require("../utils/httpError");
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 const getMe = asyncHandler(async (req, res) => {
   const rows = await query(
     `SELECT id,
-            full_name AS fullName,
+            full_name AS "fullName",
             phone,
             email
      FROM users
-     WHERE id = ?
+     WHERE id = $1
      LIMIT 1`,
     [req.userId],
   );
 
-  if (!rows.length) {
-    throw httpError(404, "User not found");
-  }
+  if (!rows.length) throw httpError(404, "User not found");
 
   res.json(rows[0]);
 });
@@ -30,43 +30,37 @@ const updateMe = asyncHandler(async (req, res) => {
   }
 
   const emailVal = email != null ? String(email).trim().toLowerCase() : null;
-  if (emailVal && !emailVal.includes("@")) {
+  if (emailVal && !EMAIL_REGEX.test(emailVal)) {
     throw httpError(400, "Invalid email format");
   }
   if (emailVal) {
     const existing = await query(
-      `SELECT id FROM users WHERE email = ? AND id != ? LIMIT 1`,
+      "SELECT id FROM users WHERE email = $1 AND id != $2 LIMIT 1",
       [emailVal, req.userId],
     );
-    if (existing.length) {
-      throw httpError(409, "Email already in use");
-    }
+    if (existing.length) throw httpError(409, "Email already in use");
   }
 
-  const emailSet = emailVal != null ? ", email = ?" : "";
-  const params = [
-    String(fullName).trim(),
-    phone ? String(phone).trim() : null,
-    ...(emailVal != null ? [emailVal] : []),
-    req.userId,
-  ];
+  // Build dynamic SET clause with auto-numbered parameters
+  const params = [];
+  const p = (val) => { params.push(val); return `$${params.length}`; };
 
-  await query(
-    `UPDATE users SET full_name = ?, phone = ?${emailSet} WHERE id = ?`,
-    params,
-  );
+  let sql = `UPDATE users SET full_name = ${p(String(fullName).trim())}, phone = ${p(phone ? String(phone).trim() : null)}`;
+  if (emailVal != null) sql += `, email = ${p(emailVal)}`;
+  sql += ` WHERE id = ${p(req.userId)}`;
+
+  await query(sql, params);
 
   const rows = await query(
     `SELECT id,
-            full_name AS fullName,
+            full_name AS "fullName",
             phone,
             email
      FROM users
-     WHERE id = ?
+     WHERE id = $1
      LIMIT 1`,
     [req.userId],
   );
-
   if (!rows.length) throw httpError(404, "User not found");
 
   res.json(rows[0]);

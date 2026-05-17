@@ -1,24 +1,31 @@
 // src/db/migrate.js
+// Initializes the database by executing schema.sql.
+// All statements use IF NOT EXISTS so it is safe to re-run.
+//
+// Usage:
+//   node src/db/migrate.js
+
 require("dotenv").config();
-const { query } = require("./db");
+const fs = require("fs");
+const path = require("path");
+const { pool } = require("./db");
 
 async function migrate() {
-  try {
-    await query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        full_name VARCHAR(120) NOT NULL,
-        email VARCHAR(120) NOT NULL UNIQUE,
-        phone VARCHAR(30) DEFAULT NULL,
-        password_hash VARCHAR(255) NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
+  const schemaPath = path.join(__dirname, "schema.sql");
 
-    console.log("✅ users table ready");
-    process.exit();
+  if (!fs.existsSync(schemaPath)) {
+    console.error("❌ schema.sql not found at:", schemaPath);
+    process.exit(1);
+  }
+
+  const sql = fs.readFileSync(schemaPath, "utf8");
+
+  try {
+    await pool.query(sql);
+    console.log("✅ Database schema initialized (all tables + indexes ready)");
+    process.exit(0);
   } catch (e) {
-    console.error("Migration error:", e.message);
+    console.error("❌ Migration failed:", e.message);
     process.exit(1);
   }
 }
