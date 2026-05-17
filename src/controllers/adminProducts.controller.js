@@ -7,7 +7,7 @@ const adminCreateProduct = asyncHandler(async (req, res) => {
   const name      = String(req.body.name || "").trim();
   const price     = Number(req.body.price);
   const quantity  = Number.isFinite(Number(req.body.quantity)) ? Number(req.body.quantity) : 0;
-  const image_url = req.body.image_url == null ? null : String(req.body.image_url).trim();
+  const image_url = req.body.image_url == null ? null : (String(req.body.image_url).trim() || null);
   const description = req.body.description == null ? null : String(req.body.description).trim();
   const category_id = Number(req.body.category_id);
 
