@@ -8,6 +8,12 @@ require("./db/db");
 
 const app = express();
 
+// Render (and most PaaS hosts) sit behind a reverse proxy that adds
+// X-Forwarded-For. Trusting exactly one hop lets Express derive the real
+// client IP correctly, which express-rate-limit requires to work.
+// Using `1` (not `true`) prevents IP-spoofing via a crafted header chain.
+app.set("trust proxy", 1);
+
 app.use(helmet());
 
 // CORS — allow requests from explicitly listed origins.

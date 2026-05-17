@@ -18,11 +18,26 @@ if (!process.env.DATABASE_URL) {
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  // Required for Supabase: it uses a self-signed certificate.
+  // Supabase uses a self-signed cert on the pooler endpoint.
   ssl: { rejectUnauthorized: false },
-  max: 10,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 5000,
+  // 5 is safe for Supabase free-tier Session Pooler (PgBouncer).
+  // Higher values don't help — PgBouncer itself limits concurrency.
+  max: 5,
+  // Keep well below PgBouncer's server_idle_timeout so the pool never
+  // hands out a connection that PgBouncer has already closed server-side.
+  idleTimeoutMillis: 10000,
+  // Generous timeout for Render cold-starts (TLS + pooler handshake).
+  connectionTimeoutMillis: 10000,
+  // TCP keepalive detects silently dropped connections before a query
+  // attempts to use them, preventing ECONNRESET mid-request.
+  keepAlive: true,
+  keepAliveInitialDelayMillis: 10000,
+});
+
+// Without this handler, a connection dying while idle in the pool emits
+// an uncaught 'error' event that crashes the Node process on Render.
+pool.on("error", (err) => {
+  console.error("❌ Idle DB client error:", err.message);
 });
 
 // Quick connection test at startup
